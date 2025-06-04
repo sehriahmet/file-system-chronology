@@ -1,0 +1,11 @@
+- 2:root/
+-- 11:lost+sound/
+-- 65:folder1/
+--- (66:file1.txt)
+--- 69:file2.txt
+-- 67:folder2/
+--- (66:file1.txt)
+--- 70:file3.txt
+-- 68:folder3/
+--- 66:file1.txt
+--- 71:file4.txt
