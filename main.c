@@ -51,14 +51,6 @@ void read_superblock() {
     inodes_per_grp = super_block.inodes_per_group;
     blocks_per_group = super_block.blocks_per_group;
 
-    // TODO: if all complies after all delete the line below!
-    // blocks_per_group = (super_block.block_count + super_block.blocks_per_group - 1) / super_block.blocks_per_group;
-    // if (super_block.inode_size) {
-    //     inode_size = super_block.inode_size;
-    // } else {
-    //     inode_size = 128;
-    // }
-
 }
 
 void read_block_group_descriptors() {
@@ -101,18 +93,8 @@ void add_creation_event(uint32_t inode_no, uint32_t parent_inode, const char *fu
     for (int i =0 ; i<history_event_count; i++) {
         if (inode_no == history_events[i].inode && (history_events[i].type == 5 || history_events[i].type == 6) && (!history_events[i].p_inode2)) {
             history_events[i].p_inode2 = parent_inode;
-            // history_events[i].new_path = (full_path);
             strncpy(history_events[i].new_path, full_path, 4096);
-            // history_events[i].timestamp = di2.modification_time;
-
-            // struct ext2_inode di3;
-            // read_inode(history_events[i].p_inode, &di3);
             history_events[i].timestamp = di.change_time;
-            // di is moved file 
-            // di2->new path and di3->old path are the parent folders 
-            // if (di2.modification_time == di3.modification_time) {
-            //     history_events[i].timestamp = -1;
-            // }
 
             return;
         }
@@ -146,8 +128,6 @@ void add_deletion_event(uint32_t inode_no, uint32_t parent_inode, const char *fu
     read_inode(parent_inode, &di2);
 
     long ts = di.deletion_time ? di.deletion_time : (-1);
-    
-    
 
     struct HistoryEvent ev;
     ev.timestamp = ts;
@@ -178,7 +158,7 @@ void add_deletion_event(uint32_t inode_no, uint32_t parent_inode, const char *fu
 }
 
 
-void process_and_write_history() {
+void reveal_history() {
     for (int i = 0; i < history_event_count - 1; i++) {
         for (int j = 0; j < history_event_count - i - 1; j++) {
             if (history_events[j].timestamp > history_events[j + 1].timestamp) {
@@ -238,9 +218,6 @@ void process_and_write_history() {
 
     }
 }
-
-
-
 
 void add_block(uint32_t **dir_blocks_ptr, int *dir_cap, int *block_count, uint32_t b) {
     int new_cap;
@@ -366,24 +343,10 @@ void traverse_dir(uint32_t inode_no, int depth, uint32_t parent_inode, const cha
         uint8_t *block_buf = malloc(block_size);
 
         pread(img_fd, block_buf, block_size, blk_offset);
-        /* 3.a) Real girdileri topla */
+
         int offset = 0;
         while (offset < block_size) {
             struct ext2_dir_entry *entry = (struct ext2_dir_entry *)(block_buf + offset);
-
-            // if (entry->inode == 0) {
-            //     if (entry->length == 0) {
-            //         offset += 4;
-            //     } else {
-            //         offset += entry->length;
-            //     }
-            //     continue;
-            // } 
-
-            // if (entry->length == 0) {
-            //     offset += 4;
-            //     continue;
-            // }
 
             if (entry->inode == 0) {
                 offset += entry->length;
@@ -420,12 +383,9 @@ void traverse_dir(uint32_t inode_no, int depth, uint32_t parent_inode, const cha
                     if (history_events[i].inode == inode_no) flag = 1;
                 }
 
-
                 add_creation_event(entry->inode, inode_no, full_path, real_items[real_count-1].is_dir);
 
             }
-
-            // offset += entry->length ? entry->length : 4;
 
             offset += entry->length;
             
@@ -434,10 +394,6 @@ void traverse_dir(uint32_t inode_no, int depth, uint32_t parent_inode, const cha
         offset = 0;
         while (offset < block_size) {
             struct ext2_dir_entry *entry = (struct ext2_dir_entry *)(block_buf + offset);
-            // if (entry->inode == 0 || entry->length == 0) {
-            //     offset += entry->length ? entry->length : 4;
-            //     continue;
-            // }
 
             if (entry->inode == 0) {
                 offset += entry->length;
@@ -448,7 +404,6 @@ void traverse_dir(uint32_t inode_no, int depth, uint32_t parent_inode, const cha
             minimal_len = ((minimal_len + 3) / 4) * 4;
             
             if (entry->length < minimal_len || entry->length > block_size) {
-                // offset += entry->length ? entry->length : 4;
                 offset += entry->length;
                 continue;
             }
@@ -494,7 +449,6 @@ void traverse_dir(uint32_t inode_no, int depth, uint32_t parent_inode, const cha
                     break;
                 }
             }
-            // offset += entry->length ? entry->length : 4;
             offset+= entry->length;
         }
 
@@ -558,22 +512,11 @@ int main(int argc, char *argv[]) {
     char *image_path = argv[1];
     char *state_output = argv[2];
     char *history_output = argv[3];
-    /* history_output (argv[3]) 3.1.2 aşamasında kullanılmıyor */
 
     img_fd = open(image_path, O_RDONLY);
-    // if (img_fd < 0) {
-    //     perror("open(image)");
-    //     return 0;
-    // }
 
     state_output_fp = fopen(state_output, "w");
     history_output_fp = fopen(history_output, "w");
-
-    // if (!state_output_fp) {
-    //     perror("fopen(state_output)");
-    //     close(img_fd);
-    //     return EXIT_FAILURE;
-    // }
 
     read_superblock();
     read_block_group_descriptors();
@@ -581,7 +524,7 @@ int main(int argc, char *argv[]) {
     fprintf(state_output_fp, "- %u:root/", EXT2_ROOT_INODE);
     traverse_dir(EXT2_ROOT_INODE, 2, EXT2_ROOT_INODE, "/", 0);
 
-    process_and_write_history();
+    reveal_history();
 
     fclose(state_output_fp);
     fclose(history_output_fp);
